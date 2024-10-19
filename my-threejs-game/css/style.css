@@ -1,0 +1,30 @@
+body {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  flex-direction: column;
+  background-color: #222;
+  margin: 0;
+}
+
+.car-viewer-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.car-viewer {
+  width: 500px;
+  height: 400px;
+  background-color: #000;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.car-name {
+  margin-top: 10px;
+  color: white;
+  font-size: 20px;
+}
