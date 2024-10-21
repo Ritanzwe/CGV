@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import * as CANNON from 'cannon-es';
 
 // Set up Renderer
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -9,6 +10,10 @@ renderer.setPixelRatio(window.devicePixelRatio);
 document.body.appendChild(renderer.domElement);
 
 // Set up Scene
+const world=new CANNON.World({
+    gravity:new CANNON.Vec3(0,-9.8,0)
+});
+const timeStep=1/60;
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87ceeb); // Sky blue color
 
@@ -30,11 +35,24 @@ scene.add(directionalLight);
 
 // Add Ground Plane
 const groundGeometry = new THREE.PlaneGeometry(50, 50);
-const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x808080 });
-const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-ground.rotation.x = -Math.PI / 2; // Rotate to lie flat
-ground.position.y = -0.5;
-scene.add(ground);
+const groundMaterial = new THREE.MeshStandardMaterial({ 
+    color: 0x808080 
+});
+const groundMesh = new THREE.Mesh(groundGeometry, groundMaterial);
+//groundMesh.rotation.x = -Math.PI / 2; // Rotate to lie flat
+groundMesh.position.y = 0;
+scene.add(groundMesh);
+
+
+const groundBody=new CANNON.Body({
+    shape:new CANNON.Plane(),
+    quaternion: new CANNON.Quaternion().setFromEuler(-Math.PI / 2, 0, 0),
+    position: new CANNON.Vec3(0,0,0),
+    
+})
+//groundBody.quaternion.copy(groundMesh.quaternion);
+world.addBody(groundBody);
+
 
 // Load the Car Model
 const loader = new GLTFLoader();
@@ -45,7 +63,7 @@ loader.load(
     (gltf) => {
         porsche = gltf.scene;
         porsche.scale.set(0.5, 0.5, 0.5);
-        porsche.position.y = 0; // Ensure the car rests on the ground
+        //porsche.position.y = 0.0; // Ensure the car rests on the ground
         scene.add(porsche);
 
         // Initialize Car Controls
@@ -68,38 +86,48 @@ var camera_toggle=false;
 class CarControls {
     constructor(car) {
         this.car = car;
-        this.velocity = new THREE.Vector3();
-        this.acceleration = 0.005; // Adjust for acceleration speed
-        this.deceleration = 0.001;
-        this.maxSpeed = 0.15; // Adjust for max speed
-        this.turnSpeed = 0.03; // Turning speed
-
+        //this.velocity = new THREE.Vector3(0,0,0);
+        this.z=0;
+        this.acceleration = 20; // Adjust for acceleration speed
+        this.deceleration = 0.5;
+        this.maxSpeed = 30; // Adjust for max speed
+        this.turnSpeed = 0.7; // Turning speed
+        this.left=false;
+        this.forward=false;
+        this.right=false;
+        this.backward=false;
+        this.velocity=new THREE.Vector3();
         // Bind Key Events
         window.addEventListener('keydown', (event) => this.onKeyDown(event));
         window.addEventListener('keyup', (event) => this.onKeyUp(event));
+        const shape = new CANNON.Box(new CANNON.Vec3(0, 0, 0)); // Adjust dimensions as needed
+        this.body = new CANNON.Body({ mass: 150 }); // Adjust mass as needed
+        this.body.addShape(shape);
+        this.body.position.set(0, 0, 0);
+        //this.body.angularDamping = 0.5;
+        world.addBody(this.body);
     }
 
-    onKeyDown(event) {
-        
+    onKeyDown(event){
         if (event.key === 'ArrowUp') {
             //console.log("up pressed");
-            forward=true;
-            backward=false;
+            this.forward=true;
+            this.backward=false;
         } 
         else if (event.key === 'ArrowDown') {
             //console.log("down pressed");
-            backward=true;
-            forward=false;
+            this.backward=true;
+            this.forward=false;
         }
         else if (event.key === 'ArrowLeft') {
             //console.log("left pressed");
-            left=true; // Turn left
-            right=false;
+            this.left=true;
+            this.right=false;
         } 
         else if (event.key === 'ArrowRight') {
             //console.log("right pressed");
-            right=true; // Turn right
-            left=false;
+            this.right=true;
+            this.left=false;
         }
         else if(event.key==="c"){
             camera_toggle=!camera_toggle;
@@ -112,102 +140,189 @@ class CarControls {
 
     onKeyUp(event) {
         if (event.key === 'ArrowUp'){
-            forward=false;
+            this.forward=false;
             
         } 
         if (event.key === 'ArrowDown') {
-            backward=false;
+            this.backward=false;
         }
-        if (event.key==="ArrowLeft"||event.key==="ArrowRight"){
+        if (event.key==="ArrowLeft"){
             //this.car.rotation.set(0, 0, 0);
-            left=false;
-            right=false;
+            this.left=false;
+            this.body.angularVelocity.y=0;
+            //this.right=false;
+        }
+        if (event.key==="ArrowRight"){
+            //this.car.rotation.set(0, 0, 0);
+            //this.left=false;
+            this.right=false;
+            this.body.angularVelocity.y=0;
         }
     }
 
     update() {
-        if (this.car) {
-            // Move car based on velocity
-            if (forward){
-                this.velocity.z = Math.min(this.velocity.z + this.acceleration, this.maxSpeed);
-                if (left){
-                    this.car.rotation.y += this.turnSpeed;
+        if (this.body) {
+            
+            //let forwardVector=new CANNON.Vec3(0,0,1);
+            const backwardVector=new CANNON.Vec3(0,0,-1);
+            //let worldForwardVector=this.body.quaternion.vmult(forwardVector);
+            if (this.forward){
+                console.log("============================");
+                console.log("position");
+                console.log(this.body.position);
+                console.log("velocity");
+                console.log(this.body.velocity);
+                console.log(this.body.quaternion);
+            //
+            // if (!this.left && !this.right) {
+            //     this.body.angularVelocity.set(0, 0, 0); // Reset angular velocity
+            // }
+                //console.log("here");
+                //console.log(this.body.position);
+                //const force=forwardVector.scale(this.acceleration);
+                if (this.left){
+                    //console.log("left");
+                    //console.log(this.body.position);
+                    this.body.angularVelocity.y = this.turnSpeed;
+                    //this.body.rotation.y += this.turnSpeed;
                     //camera.rotation.y+=this.turnSpeed;
                 }
-                if(right){
-                    this.car.rotation.y -= this.turnSpeed;
+                else if(this.right){
+                    this.body.angularVelocity.y = -this.turnSpeed;
+                    
+                    //this.body.rotation.y -= this.turnSpeed;
                     //camera.rotation.y-=this.turnSpeed;
                 }
+                else{
+                    this.body.angularVelocity.y = 0;
+                }
+                
+                //this.body.applyLocalForce(force, new CANNON.Vec3(0, 0, 0));
+                // let worldForwardVector=this.body.quaternion.vmult(forwardVector);
+                // this.body.velocity.z+=this.acceleration;
+                //this.body.velocity+=worldForwardVector;
+                let forwardVector = new CANNON.Vec3(0, 0, 1);
+                forwardVector=forwardVector.scale(20);
+                let worldForwardVector = this.body.quaternion.vmult(forwardVector);
+                console.log(worldForwardVector);
+                console.log("++++++++++++++++++++++++++++");
+                //const force = worldForwardVector.scale(this.acceleration);
+                //this.body.applyForce(force, this.body.position);
+                this.body.velocity.x+=worldForwardVector.x;
+                this.body.velocity.y+=worldForwardVector.y;
+                this.body.velocity.z+=worldForwardVector.z;
             }
-            if (backward){
-                this.velocity.z = Math.max(this.velocity.z - this.acceleration, -this.maxSpeed);
-                if (left){
-                    this.car.rotation.y -= this.turnSpeed;
-                    //camera.rotation.y-=this.turnSpeed;
-                }
-                if(right){
-                    this.car.rotation.y += this.turnSpeed;
+            if (this.backward){
+                //const force=backwardVector.scale(this.acceleration);
+                if (this.left){
+                    this.body.angularVelocity.y = -this.turnSpeed;
+                    //this.body.rotation.y += this.turnSpeed;
                     //camera.rotation.y+=this.turnSpeed;
                 }
+                else if(this.right){
+                    this.body.angularVelocity.y = this.turnSpeed;
+                    //this.body.rotation.y -= this.turnSpeed;
+                    //camera.rotation.y-=this.turnSpeed;
+                }
+                else{
+                    this.body.angularVelocity.y = 0;
+                }
+                //this.body.applyLocalForce(force, new CANNON.Vec3(0, 0, 0));
+                //this.body.velocity.z-=this.acceleration;
+                let forwardVector = new CANNON.Vec3(0, 0, -1);
+                forwardVector=forwardVector.scale(20);
+                let worldForwardVector = this.body.quaternion.vmult(forwardVector);
+                console.log(worldForwardVector);
+                console.log("++++++++++++++++++++++++++++");
+                //const force = worldForwardVector.scale(this.acceleration);
+                //this.body.applyForce(force, this.body.position);
+                this.body.velocity.x+=worldForwardVector.x;
+                this.body.velocity.y+=worldForwardVector.y;
+                this.body.velocity.z+=worldForwardVector.z;
             }
-            if (!forward&&!backward){
+            if (!this.forward&&!this.backward){
                 //this.velocity.set(0,0,0);
-                if (Math.abs(this.velocity.z) < 0.001) {
-                    this.velocity.z = 0;
+                //decelerate
+                //const force=forwardVector.scale(this.deceleration);
+                if (Math.abs(this.body.velocity.z) < 0.001) {
+                    //console.log("expected");
+                    this.body.velocity.z = 0;
                 }
-                if(this.velocity.z>0){
-                    this.velocity.z-=this.deceleration;
+                else if(this.body.velocity.z>0){
+                    const decelForce = this.body.velocity.z > 0 ? backwardVector.scale(this.deceleration) : forwardVector.scale(this.deceleration);
+                    this.body.velocity.z-=this.deceleration;
                     if (left){
-                        this.car.rotation.y += this.turnSpeed;
+                        this.body.angularVelocity.y = this.turnSpeed;
+                        //this.body.rotation.y += this.turnSpeed;
                         //camera.rotation.y+=this.turnSpeed;
                     }
-                    if(right){
-                        this.car.rotation.y -= this.turnSpeed;
+                    else if(this.right){
+                        this.body.angularVelocity.y = -this.turnSpeed;
+                        //this.body.rotation.y -= this.turnSpeed;
                         //camera.rotation.y-=this.turnSpeed;
                     }
+                    else{
+                        this.body.angularVelocity.y = 0;
+                    }
+                    this.body.applyLocalForce(decelForce, this.body.position);
                 }
-                if(this.velocity.z<0){
-                    this.velocity.z+=this.deceleration;
-                    if (left){
-                        this.car.rotation.y -= this.turnSpeed;
-                        //camera.rotation.y-=this.turnSpeed;
-                    }
-                    if(right){
-                        this.car.rotation.y += this.turnSpeed;
+                else if(this.body.velocity.z<0){
+                    let forwardVector = new CANNON.Vec3(0, 0, 1);
+                    const force=forwardVector.scale(this.deceleration);
+                    this.body.velocity.z+=this.deceleration;
+                    if (this.left){
+                        this.body.angularVelocity.y = -this.turnSpeed;
+                        //this.body.rotation.y += this.turnSpeed;
                         //camera.rotation.y+=this.turnSpeed;
                     }
+                    else if(this.right){
+                        this.body.angularVelocity.y = this.turnSpeed;
+                        //this.body.rotation.y -= this.turnSpeed;
+                        //camera.rotation.y-=this.turnSpeed;
+                    }
+                    else{
+                        this.body.angularVelocity.y = 0;
+                    }
+                    this.body.applyLocalForce(force, this.body.position);
                 }
             }
-            this.car.position.add(this.velocity.clone().applyQuaternion(this.car.quaternion));
+            // console.log("============================");
+            // console.log(this.body.position);
+            // console.log(this.body.velocity);
+            // console.log(this.body.quaternion);
+            // console.log("++++++++++++++++++++++++++++");
+            //this.body.position.add(this.body.velocity.clone().applyQuaternion(this.body.quaternion));
+            this.car.position.clone(this.body.position);
+            this.car.quaternion.copy(this.body.quaternion);
         }
+        this.car.position.copy(this.body.position);
+        this.car.quaternion.copy(this.body.quaternion);
     }
 }
-
 let carControls;
 
-function updateCameraPosition() {
-    // Define the offset from the car's local space (e.g., behind and slightly above)
-    const offset = new THREE.Vector3(0, 2, -5); // Adjust to place camera behind and above car
-
-    // Get the car's world position (including x, y, z coordinates)
-    const carPosition = carControls.car.position.clone();  // Full car position
-
-    // Apply car's rotation (quaternion) to the offset to place the camera relative to the car's orientation
+const carBody=new CANNON.Body({
+    mass:1,
+    shape:new CANNON.Box(new CANNON.Vec3(1,1,2))
+});
+world.addBody(carBody);
+function updateCameraPosition(){
+    const offset = new THREE.Vector3(0,2,-5);
+    const carPosition = carControls.car.position.clone();
     const carQuaternion = carControls.car.quaternion.clone();
     const cameraPosition = offset.applyQuaternion(carQuaternion).add(carPosition);
 
-    // Move the camera smoothly to the new position
-    camera.position.lerp(cameraPosition, 0.1);
+    camera.position.lerp(cameraPosition,0.1);
     //console.log(carPosition);
-    // Make the camera look at the exact position of the car
-    camera.lookAt(carPosition);
+    camera.lookAt(carPosition); 
 }
 
 // Animation Loop
 function animate() {
     requestAnimationFrame(animate);
-
-    // Update Car Controls
+    world.step(timeStep);
+    groundMesh.position.copy(groundBody.position);
+    groundMesh.quaternion.copy(groundBody.quaternion);
     if (camera_toggle){
         updateCameraPosition();
     }
@@ -217,12 +332,7 @@ function animate() {
     if (carControls) {
         carControls.update();
     }
-    
 
-    // Update Orbit Controls
-    
-
-    // Render Scene
     renderer.render(scene, camera);
 }
 
