@@ -19,7 +19,8 @@ scene.background = new THREE.Color(0x87ceeb); // Sky blue color
 
 // Set up Camera
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-camera.position.set(0, 2, 5);
+camera.position.set(-6, 6, -6);
+//camera.lookAt(-36,0,-24)
 
 // Set up Orbit Controls
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -72,15 +73,56 @@ world.addBody(dummyBody);
 
 // Load the Car Model
 const loader = new GLTFLoader();
-let porsche;
+function createTrimesh(geometry) {
+    const vertices = geometry.attributes.position.array;
+    const indices = geometry.index ? geometry.index.array : Object.keys(vertices).map(Number);
 
+    return new CANNON.Trimesh(vertices, indices);
+}
+
+var track;
+var track_body;
+loader.load(
+    'assets/models/race_track1/scene.gltf',
+    (gltf) => {
+        track = gltf.scene;
+        track.scale.set(0.5, 0.5, 0.5);
+        track.position.y = -10;
+        scene.add(track);
+        track.traverse((child) => {
+            if (child.isMesh) {
+                const geometry = child.geometry;
+                const shape = createTrimesh(geometry);
+
+                track_body = new CANNON.Body({
+                    mass: 0,
+                    shape: shape,
+                    position: new CANNON.Vec3(track.position.x, track.position.y, track.position.z),
+                    quaternion: new CANNON.Quaternion().copy(track.quaternion)
+                });
+
+                world.addBody(track_body);
+            }
+        });
+    },
+    (xhr) => {
+        console.log((xhr.loaded / xhr.total * 100) + '% loaded');
+    },
+    (error) => {
+        console.error('An error occurred while loading the model:', error);
+    }
+);
+
+let porsche;
 loader.load(
     'assets/models/porsche/scene.gltf',
     (gltf) => {
         porsche = gltf.scene;
         porsche.scale.set(0.5, 0.5, 0.5);
-        porsche.position.y = 10;
-        track.position.z = -15;
+        porsche.position.x = 36;
+        porsche.position.y = 0;
+        porsche.position.z = 24;
+        //new CANNON.Vec3(36,0,24)
         scene.add(porsche);
 
         // Initialize Car Controls
@@ -93,31 +135,7 @@ loader.load(
         console.error('An error occurred while loading the model:', error);
     }
 );
-var track;
-var track_body;
-loader.load(
-    'assets/models/race_track1/scene.gltf',
-    (gltf) => {
-        track = gltf.scene;
-        track.scale.set(0.5, 0.5, 0.5);
-        track.position.y = 10;
-        scene.add(track);
-        const shape=new CANNON.Box(new CANNON.Vec3(track.scale.x, track.scale.y, track.scale.z));
-        track_body = new CANNON.Body({ mass: 9999 });
-        track_body.addShape(shape);
-        track_body.position.copy(track.position);
-        track_body.quaternion.copy(track.quaternion);
-        world.addBody(track_body);
-        // Initialize Car Controls
-        //carControls = new CarControls(track);
-    },
-    (xhr) => {
-        console.log((xhr.loaded / xhr.total * 100) + '% loaded');
-    },
-    (error) => {
-        console.error('An error occurred while loading the model:', error);
-    }
-);
+
 
 // Car Controls Class
 var camera_toggle=false;
@@ -185,7 +203,7 @@ class CarControls {
             }
         }
         else if(event.key==="r"){
-            this.body.position=new CANNON.Vec3(0,0,-15);
+            this.body.position=new CANNON.Vec3(36,0,24);
         }
         
     }
