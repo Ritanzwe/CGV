@@ -1,19 +1,79 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="css/styles.css">
-    <title>Car Game - Home</title>
-</head>
-<body>
-    <header>
-        <h1>Welcome to the Car Game!</h1>
-    </header>
-    <main>
-        <button id="startGameBtn">Start Game</button>
-    </main>
-    <script src="/js/main.js"></script>
-</body>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Car Configurator</title>
+    <link rel="stylesheet" href="./src/style.scss" />
+  </head>
+
+  <body>
+    <!-- Overlay Preloader Element -->
+    <div id="preloader" class="loader overlay">
+      <div class="wrapper">
+        <div class="icon"></div>
+        <img
+          src="/blacklist.png"
+          alt="Bugatti Chiron"
+          width="100px"
+          height="70px"
+          style="padding: 10px"
+        />
+        <h1 class="title no-select">The blacklist</h1>
+        <h3 class="desc no-select">- LOADING -</h3>
+        <button id="btn-start-demo" class="btn-main">Start</button>
+      </div>
+    </div>
+
+    <!-- Screen Fader -->
+    <div id="screen-fader" class="screen-fader overlay"></div>
+
+    <!-- Welcome Screen -->
+    <div id="welcome-screen" class="ws overlay">
+      <div class="wrapper">
+        <h1 class="no-select">The blacklist</h1>
+         <div className="scroll-container">
+                <h2>The Blacklist Game</h2>
+                <p>
+                    In a dystopian future, a world divided by power, corruption, and control, a feared system known as "The Blacklist" governs all. It is more than just a list; it is a living entity dictating the fates of those who dare to defy the regime. In this world, every action is monitored by an all-seeing government known as the Authority.
+                </p>
+                <p>
+                    The Blacklist serves not merely as punishment but as a death sentence. Once your name appears on it, your life becomes a mere shadow of what it once was. Your movements are tracked, your every word scrutinized, and your freedom stripped away. There are no trials, no appeals—only the relentless pursuit of agents from the Blacklist Enforcement, who hunt the marked like prey. Yet, there lies one path to freedom: a grim and twisted game where only the smartest and fastest can reclaim their lives.
+                </p>
+                <p>
+                    This is the story of Jaxon Kade, a man caught in the web of the Blacklist. Once a respected engineer in the city of Solace, Jaxon stumbled upon a secret threatening to unravel the Authority's iron grip on society. Branded a traitor, his name quickly rose to the top of the Blacklist.
+                </p>
+                <p>
+                    Captured and imprisoned in "The Cage," a massive underground facility where those marked by the Blacklist are held, Jaxon faces a grim ultimatum: participate in the Blacklist Game or rot in a cell forever. The rules are deceptively simple—solve a series of harrowing challenges devised by the Authority's most twisted minds. Fail, and you vanish without a trace. Succeed, and you earn a fleeting chance at redemption.
+                </p>
+                <p>
+                    But the game is rigged. Each challenge comes with a demand from the Blacklist itself, known as the "Blacklist Demands." These tasks force participants into impossible choices—betray a friend, compromise their morals, or face dire consequences. As each player navigates these dehumanizing demands, they are haunted by the grim reality: no one has ever truly emerged victorious from the Blacklist Game.
+                </p>
+                <p>
+                    Jaxon's first challenge appears simple at first glance: sabotage the escape attempt of his only friend, Lena, or see her added to the Blacklist in his place. Every fiber of his being urges him to protect her, yet the crushing weight of his survival looms overhead. Unbeknownst to Lena, she is planning to escape that very night, and Jaxon's choice will determine their fates. Will he betray his friend to save himself, or risk everything to keep her free? In a world where every decision can lead to redemption or ruin, the line between right and wrong blurs in the shadows of The Cage.
+                </p>
+            </div>
+        <button id="btn-skip-intro">Skip Intro</button>
+      </div>
+    </div>
+    <!-- Existing elements for the intro -->
+
+<div id="welcome-screen" style="display:none;">
+  <!-- Content for the welcome screen -->
+</div>
+
+<!-- New section for level selection -->
+<div id="level-selection" style="display:none;">
+  <h1>Select Level</h1>
+  <ul>
+    <li><button class="level-btn" data-level="1">Level 1</button></li>
+    <li><button class="level-btn" data-level="2">Level 2</button></li>
+    <li><button class="level-btn" data-level="3">Level 3</button></li>
+  </ul>
+</div>
+
+
+    <script type="module" src="/src/app/app.js"></script>
+  </body>
 </html>
- 
