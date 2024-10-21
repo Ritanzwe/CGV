@@ -79,7 +79,8 @@ loader.load(
     (gltf) => {
         porsche = gltf.scene;
         porsche.scale.set(0.5, 0.5, 0.5);
-        porsche.position.y = 10; // Ensure the car rests on the ground
+        porsche.position.y = 10;
+        track.position.z = -15;
         scene.add(porsche);
 
         // Initialize Car Controls
@@ -92,12 +93,33 @@ loader.load(
         console.error('An error occurred while loading the model:', error);
     }
 );
+var track;
+var track_body;
+loader.load(
+    'assets/models/race_track1/scene.gltf',
+    (gltf) => {
+        track = gltf.scene;
+        track.scale.set(0.5, 0.5, 0.5);
+        track.position.y = 10;
+        scene.add(track);
+        const shape=new CANNON.Box(new CANNON.Vec3(track.scale.x, track.scale.y, track.scale.z));
+        track_body = new CANNON.Body({ mass: 9999 });
+        track_body.addShape(shape);
+        track_body.position.copy(track.position);
+        track_body.quaternion.copy(track.quaternion);
+        world.addBody(track_body);
+        // Initialize Car Controls
+        //carControls = new CarControls(track);
+    },
+    (xhr) => {
+        console.log((xhr.loaded / xhr.total * 100) + '% loaded');
+    },
+    (error) => {
+        console.error('An error occurred while loading the model:', error);
+    }
+);
 
 // Car Controls Class
-var left=false;
-var forward=false;
-var right=false;
-var backward=false;
 var camera_toggle=false;
 class CarControls {
     constructor(car) {
@@ -161,6 +183,9 @@ class CarControls {
             if (!camera_toggle){
                 camera.position.set(0,2,5);
             }
+        }
+        else if(event.key==="r"){
+            this.body.position=new CANNON.Vec3(0,0,-15);
         }
         
     }
@@ -371,6 +396,10 @@ function animate() {
     groundMesh.quaternion.copy(groundBody.quaternion);
     dummyMesh.position.copy(dummyBody.position);
     dummyMesh.quaternion.copy(dummyBody.quaternion);
+    if (track){
+        track.position.copy(track_body.position);
+        track.quaternion.copy(track_body.quaternion);
+    }
     if (camera_toggle){
         updateCameraPosition();
     }
@@ -378,6 +407,7 @@ function animate() {
         controls.update();
     }
     if (carControls) {
+        //console.log(carControls.body.position);
         carControls.update();
     }
 
