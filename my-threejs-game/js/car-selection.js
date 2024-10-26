@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import * as CANNON from "cannon-es";
+import * as oimo from 'oimo';
 
 // Set up Renderer
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -10,10 +10,6 @@ renderer.setPixelRatio(window.devicePixelRatio);
 document.body.appendChild(renderer.domElement);
 
 // Set up Scene
-const world = new CANNON.World({
-  gravity: new CANNON.Vec3(0, -9.8, 0),
-});
-const timeStep = 1 / 60;
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87ceeb); // Sky blue color
 
@@ -25,14 +21,13 @@ const camera = new THREE.PerspectiveCamera(
   1000
 );
 camera.position.set(-6, 6, -6);
-//camera.lookAt(-36,0,-24)
 
 // Set up Orbit Controls
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true; // Smooth the control movements
+controls.enableDamping = true;
 
 // Add Lighting
-const ambientLight = new THREE.AmbientLight(0x404040, 2); // Soft light
+const ambientLight = new THREE.AmbientLight(0x404040, 2);
 scene.add(ambientLight);
 
 const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
@@ -41,362 +36,168 @@ scene.add(directionalLight);
 
 // Add Ground Plane
 const groundGeometry = new THREE.PlaneGeometry(50, 50);
-const groundMaterial = new THREE.MeshStandardMaterial({
-  color: 0x808080,
-});
+const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x808080 });
 const groundMesh = new THREE.Mesh(groundGeometry, groundMaterial);
-//groundMesh.rotation.x = -Math.PI / 2; // Rotate to lie flat
+groundMesh.rotation.x = -Math.PI / 2; 
 groundMesh.position.y = 0;
 scene.add(groundMesh);
 
-const groundBody = new CANNON.Body({
-  shape: new CANNON.Plane(),
-  quaternion: new CANNON.Quaternion().setFromEuler(-Math.PI / 2, 0, 0),
-  position: new CANNON.Vec3(0, -10, 0),
+// Physics World Setup
+const world = new oimo.World({ 
+  timestep: 1/60, 
+  iterations: 8, 
+  broadphase: 2,
+  worldscale: 1,
+  random: true,
+  info: false 
 });
-//groundBody.quaternion.copy(groundMesh.quaternion);
-world.addBody(groundBody);
-
-const dummyGeo = new THREE.BoxGeometry(1, 0.8, 2.2);
-const dummyMat = new THREE.MeshBasicMaterial({
-  color: 0xff0000,
-  wireframe: true,
-});
-const dummyMesh = new THREE.Mesh(dummyGeo, dummyMat);
-dummyMesh.position.x = 10;
-dummyMesh.position.y = 10;
-dummyMesh.position.z = 10;
-scene.add(dummyMesh);
-
-const dummyBody = new CANNON.Body({
-  mass: 1500,
-  shape: new CANNON.Box(new CANNON.Vec3(1, 0.8, 2.2)),
-  position: new CANNON.Vec3(
-    dummyMesh.position.x,
-    dummyMesh.position.y,
-    dummyMesh.position.z
-  ),
-});
-world.addBody(dummyBody);
+const groundBody = world.add({
+  type: 'box',           // Box shape
+  size: [500, 1, 500],     // Dimensions of the ground (should match your visual ground size)
+  pos: [0, -0.5, 0],     // Position (slightly below y=0 to align visually)
+  rot: [0, 0, 0],        // Rotation
+  move: false,           // Static (not movable)
+  density: 1
+})
+let carControls;
+let porsche;
 
 // Load the Car Model
 const loader = new GLTFLoader();
-function createTrimesh(geometry) {
-  const vertices = geometry.attributes.position.array;
-  const indices = geometry.index
-    ? geometry.index.array
-    : Object.keys(vertices).map(Number);
-
-  return new CANNON.Trimesh(vertices, indices);
-}
-
-var track;
-var track_body;
-loader.load(
-  "assets/models/race_track1/scene.gltf",
-  (gltf) => {
-    track = gltf.scene;
-    track.scale.set(0.5, 0.5, 0.5);
-    track.position.y = -10;
-    scene.add(track);
-    track.traverse((child) => {
-      if (child.isMesh) {
-        const geometry = child.geometry;
-        const shape = createTrimesh(geometry);
-
-        track_body = new CANNON.Body({
-          mass: 0,
-          shape: shape,
-          position: new CANNON.Vec3(
-            track.position.x,
-            track.position.y,
-            track.position.z
-          ),
-          quaternion: new CANNON.Quaternion().copy(track.quaternion),
-        });
-
-        world.addBody(track_body);
-      }
-    });
-  },
-  (xhr) => {
-    console.log((xhr.loaded / xhr.total) * 100 + "% loaded");
-  },
-  (error) => {
-    console.error("An error occurred while loading the model:", error);
-  }
-);
-
-let porsche;
 loader.load(
   "assets/models/porsche/scene.gltf",
   (gltf) => {
     porsche = gltf.scene;
     porsche.scale.set(0.5, 0.5, 0.5);
-    porsche.position.x = 36;
-    porsche.position.y = 0;
-    porsche.position.z = 24;
-    //new CANNON.Vec3(36,0,24)
+    porsche.position.set(0, 1, 0);
     scene.add(porsche);
 
     // Initialize Car Controls
-    carControls = new CarControls(porsche);
+    carControls = new CarControls(porsche, world);
   },
-  (xhr) => {
-    console.log((xhr.loaded / xhr.total) * 100 + "% loaded");
-  },
-  (error) => {
-    console.error("An error occurred while loading the model:", error);
-  }
+  undefined,
+  (error) => console.error("An error occurred while loading the model:", error)
 );
-
-// Car Controls Class
 var camera_toggle = false;
+// Car Controls Class
 class CarControls {
-  constructor(car) {
+  constructor(car, world) {
     this.car = car;
-    //this.velocity = new THREE.Vector3(0,0,0);
-    this.z = 0;
-    this.acceleration = 20; // Adjust for acceleration speed
-    this.deceleration = 0.5;
-    this.maxSpeed = 30;
-    this.turnSpeed = 0.6;
-    this.left = false;
+    this.world = world;
+    this.acceleration = 0.005;
+    this.brakingForce = 0.02;
+    this.turnSpeed = 0.1;
+
     this.forward = false;
-    this.right = false;
     this.backward = false;
-    this.decelerating_f = false;
-    this.decelerating_b = false;
-    this.velocity = new THREE.Vector3();
-    // Bind Key Events
-    window.addEventListener("keydown", (event) => this.onKeyDown(event));
-    window.addEventListener("keyup", (event) => this.onKeyUp(event));
-    const shape = new CANNON.Box(new CANNON.Vec3(0.5, 0.4, 1.1));
-    this.body = new CANNON.Body({
-      mass: 150,
-      position: new CANNON.Vec3(
-        this.car.position.x,
-        this.car.position.y,
-        this.car.position.z
-      ),
-      shape: shape,
-      fixedRotation: true,
-      linearDamping: 0.1,
-      material: new CANNON.Material({ friction: 0.6 }),
-      collisionFilterGroup: 2,
-      collisionFilterMask: 1 | 4,
+    this.left = false;
+    this.right = false;
+    this.braking = false;
+
+    // Create Oimo physics body for the car
+    this.body = world.add({
+      type: 'box',
+      size: [1, 0.5, 2],
+      pos: [car.position.x, car.position.y, car.position.z],
+      rot: [0, 0, 0],
+      move: true,
+      density: 1
     });
-    this.body.addShape(shape);
-    //this.body.position.set(0, 0, 0);
-    //this.body.angularDamping = 0.5;
-    world.addBody(this.body);
+
+    // Bind Key Events
+    window.addEventListener('keydown', (event) => this.onKeyDown(event));
+    window.addEventListener('keyup', (event) => this.onKeyUp(event));
   }
 
   onKeyDown(event) {
-    if (event.key === "ArrowUp") {
-      //console.log("up pressed");
-      this.forward = true;
-      this.backward = false;
-    } else if (event.key === "ArrowDown") {
-      //console.log("down pressed");
-      this.backward = true;
-      this.forward = false;
-    } else if (event.key === "ArrowLeft") {
-      //console.log("left pressed");
-      this.left = true;
-      this.right = false;
-    } else if (event.key === "ArrowRight") {
-      //console.log("right pressed");
-      this.right = true;
-      this.left = false;
-    } else if (event.key === "c") {
-      camera_toggle = !camera_toggle;
-      if (!camera_toggle) {
-        camera.position.set(0, 2, 5);
-      }
-    } else if (event.key === "r") {
-      this.body.position = new CANNON.Vec3(36, 0, 24);
+    switch (event.key) {
+      case 'ArrowUp': this.forward = true; break;
+      case 'ArrowDown': this.backward = true; break;
+      case 'ArrowLeft': this.left = true; break;
+      case 'ArrowRight': this.right = true; break;
+      case ' ': this.braking = true; break;
+      case 'c': camera_toggle=!camera_toggle;break;
     }
   }
 
   onKeyUp(event) {
-    if (event.key === "ArrowUp") {
-      this.forward = false;
-    }
-    if (event.key === "ArrowDown") {
-      this.backward = false;
-    }
-    if (event.key === "ArrowLeft") {
-      //this.car.rotation.set(0, 0, 0);
-      this.left = false;
-      this.body.angularVelocity.y = 0;
-      //this.right=false;
-    }
-    if (event.key === "ArrowRight") {
-      //this.car.rotation.set(0, 0, 0);
-      //this.left=false;
-      this.right = false;
-      this.body.angularVelocity.y = 0;
+    switch (event.key) {
+      case 'ArrowUp': this.forward = false; break;
+      case 'ArrowDown': this.backward = false; break;
+      case 'ArrowLeft': this.left = false; break;
+      case 'ArrowRight': this.right = false; break;
+      case ' ': this.braking = false; break;
     }
   }
 
   update() {
     if (this.body) {
-      //let forwardVector=new CANNON.Vec3(0,0,1);
-      const backwardVector = new CANNON.Vec3(0, 0, -1);
-      //let worldForwardVector=this.body.quaternion.vmult(forwardVector);
-      if (this.forward) {
-        // console.log("============================");
-        // console.log("position");
-        // console.log(this.body.position);
-        // console.log("velocity");
-        // console.log(this.body.velocity);
-        // console.log(this.body.quaternion);
-        //
-        // if (!this.left && !this.right) {
-        //     this.body.angularVelocity.set(0, 0, 0); // Reset angular velocity
+        const force = new oimo.Vec3(0, 0, 0);
+
+        // Forward and backward acceleration
+        if (this.forward && !this.braking) {
+            force.z += this.acceleration * 50; // Forward force
+            if (this.left) {
+              this.body.angularVelocity.y = this.turnSpeed; // Turn left
+            }
+            if (this.right) {
+                this.body.angularVelocity.y = -this.turnSpeed; // Turn right
+            }
+        }
+        if (this.backward && !this.braking) {
+            force.z -= this.acceleration * 50; // Backward force
+            if (this.left) {
+              this.body.angularVelocity.y = -this.turnSpeed; // Turn left
+            }
+            if (this.right) {
+                this.body.angularVelocity.y = this.turnSpeed; // Turn right
+            }
+        }
+
+        // Apply turning forces based on input
+        // if (this.left) {
+        //     this.body.angularVelocity.y += this.turnSpeed; // Turn left
         // }
-        //console.log("here");
-        //console.log(this.body.position);
-        //const force=forwardVector.scale(this.acceleration);
-        if (this.left) {
-          //console.log("left");
-          //console.log(this.body.position);
-          this.body.angularVelocity.y = this.turnSpeed;
-          //this.body.rotation.y += this.turnSpeed;
-          //camera.rotation.y+=this.turnSpeed;
-        } else if (this.right) {
-          this.body.angularVelocity.y = -this.turnSpeed;
+        // if (this.right) {
+        //     this.body.angularVelocity.y -= this.turnSpeed; // Turn right
+        // }
 
-          //this.body.rotation.y -= this.turnSpeed;
-          //camera.rotation.y-=this.turnSpeed;
-        } else {
-          this.body.angularVelocity.y = 0;
+        // Apply braking effect
+        if (this.braking) {
+            this.body.linearVelocity.scale(1 - this.brakingForce); // Reduce speed
+            if (this.left) {
+              this.body.angularVelocity.y = this.turnSpeed; // Turn left
+            }
+            if (this.right) {
+                this.body.angularVelocity.y = -this.turnSpeed; // Turn right
+            }
         }
 
-        //this.body.applyLocalForce(force, new CANNON.Vec3(0, 0, 0));
-        // let worldForwardVector=this.body.quaternion.vmult(forwardVector);
-        // this.body.velocity.z+=this.acceleration;
-        //this.body.velocity+=worldForwardVector;
-        let forwardVector = new CANNON.Vec3(0, 0, 1);
-        forwardVector = forwardVector.scale(0.4);
-        let worldForwardVector = this.body.quaternion.vmult(forwardVector);
-        // console.log(worldForwardVector);
-        // console.log("++++++++++++++++++++++++++++");
-        // const force = worldForwardVector.scale(this.acceleration*5000);
-        // console.log(force);
-        // this.body.applyForce(force, this.body.position);
-        // console.log("Velocity before");
-        //console.log(this.body.velocity);
-        this.body.position.x += worldForwardVector.x;
-        this.body.position.y += worldForwardVector.y;
-        this.body.position.z += worldForwardVector.z;
-        // console.log("Velocity after");
-        // console.log(this.body.velocity);
-      }
-      if (this.backward) {
-        //const force=backwardVector.scale(this.acceleration);
-        if (this.left) {
-          this.body.angularVelocity.y = -this.turnSpeed;
-          //this.body.rotation.y += this.turnSpeed;
-          //camera.rotation.y+=this.turnSpeed;
-        } else if (this.right) {
-          this.body.angularVelocity.y = this.turnSpeed;
-          //this.body.rotation.y -= this.turnSpeed;
-          //camera.rotation.y-=this.turnSpeed;
-        } else {
-          this.body.angularVelocity.y = 0;
-        }
-        //this.body.applyLocalForce(force, new CANNON.Vec3(0, 0, 0));
-        //this.body.velocity.z-=this.acceleration;
-        let forwardVector = new CANNON.Vec3(0, 0, -1);
-        forwardVector = forwardVector.scale(0.4);
-        let worldForwardVector = this.body.quaternion.vmult(forwardVector);
-        // console.log(worldForwardVector);
-        // console.log("++++++++++++++++++++++++++++");
-        //const force = worldForwardVector.scale(this.acceleration);
-        //this.body.applyForce(force, this.body.position);
-        this.body.position.x += worldForwardVector.x;
-        this.body.position.y += worldForwardVector.y;
-        this.body.position.z += worldForwardVector.z;
-      }
-      if (!this.forward && !this.backward) {
-        //this.velocity.set(0,0,0);
-        //decelerate
-        //const force=forwardVector.scale(this.deceleration);
-        if (Math.abs(this.body.velocity.z) < 0.001) {
-          //console.log("expected");
-          this.body.velocity.z = 0;
-        } else if (this.body.velocity.z > 0) {
-          const decelForce =
-            this.body.velocity.z > 0
-              ? backwardVector.scale(this.deceleration)
-              : forwardVector.scale(this.deceleration);
-          this.body.velocity.z -= this.deceleration;
-          if (this.left) {
-            this.body.angularVelocity.y = this.turnSpeed;
-            //this.body.rotation.y += this.turnSpeed;
-            //camera.rotation.y+=this.turnSpeed;
-          } else if (this.right) {
-            this.body.angularVelocity.y = -this.turnSpeed;
-            //this.body.rotation.y -= this.turnSpeed;
-            //camera.rotation.y-=this.turnSpeed;
-          } else {
-            this.body.angularVelocity.y = 0;
-          }
-          //this.body.applyLocalForce(decelForce, this.body.position);
-          let forwardVector = new CANNON.Vec3(0, 0, 1);
-          forwardVector = forwardVector.scale(0.1);
-          let worldForwardVector = this.body.quaternion.vmult(forwardVector);
-          this.body.position.x -= worldForwardVector.x;
-          this.body.position.y -= worldForwardVector.y;
-          this.body.position.z -= worldForwardVector.z;
-        } else if (this.body.velocity.z < 0) {
-          // let forwardVector = new CANNON.Vec3(0, 0, 1);
-          // const force=forwardVector.scale(this.deceleration);
-          // this.body.velocity.z+=this.deceleration;
-          if (this.left) {
-            this.body.angularVelocity.y = -this.turnSpeed;
-            //this.body.rotation.y += this.turnSpeed;
-            //camera.rotation.y+=this.turnSpeed;
-          } else if (this.right) {
-            this.body.angularVelocity.y = this.turnSpeed;
-            //this.body.rotation.y -= this.turnSpeed;
-            //camera.rotation.y-=this.turnSpeed;
-          } else {
-            this.body.angularVelocity.y = 0;
-          }
-          //this.body.applyLocalForce(force, this.body.position);
-          let forwardVector = new CANNON.Vec3(0, 0, 1);
-          forwardVector = forwardVector.scale(0.1);
-          let worldForwardVector = this.body.quaternion.vmult(forwardVector);
-          this.body.position.x += worldForwardVector.x;
-          this.body.position.y += worldForwardVector.y;
-          this.body.position.z += worldForwardVector.z;
-        }
-      }
-      // console.log("============================");
-      // console.log(this.body.position);
-      // console.log(this.body.velocity);
-      // console.log(this.body.quaternion);
-      // console.log("++++++++++++++++++++++++++++");
-      //this.body.position.add(this.body.velocity.clone().applyQuaternion(this.body.quaternion));
-      // this.car.position.clone(this.body.position);
-      // this.car.quaternion.copy(this.body.quaternion);
+        // Apply the force to the car based on its orientation
+        const orientationQuat = this.body.getQuaternion();
+        const quat = new THREE.Quaternion(orientationQuat.x, orientationQuat.y, orientationQuat.z, orientationQuat.w);
+        
+        // Apply quaternion to the force vector to get world force
+        const vec3 = new THREE.Vector3(force.x, force.y, force.z);
+        vec3.applyQuaternion(quat); // Rotate the force vector to world coordinates
+
+        // Create a new Oimo Vec3 with the correct components
+        const direction = new oimo.Vec3(vec3.x, vec3.y, vec3.z);
+
+        // Apply the force directly to the physics body
+        //this.body.applyForce(direction);
+        this.body.linearVelocity.add(direction);
+        // Sync model position and rotation with physics body
+        const pos = this.body.getPosition();
+        this.car.position.set(pos.x, pos.y, pos.z);
+
+        const rot = this.body.getQuaternion();
+        this.car.quaternion.set(rot.x, rot.y, rot.z, rot.w);
     }
-    //console.log("way after")
-    //console.log(this.body.velocity);
-    this.car.position.copy(this.body.position);
-    this.car.quaternion.copy(this.body.quaternion);
-  }
 }
-let carControls;
 
-// const carBody=new CANNON.Body({
-//     mass:1500,
-//     shape:new CANNON.Box(new CANNON.Vec3(1,1,2))
-// });
-// world.addBody(carBody);
+}
+
 function updateCameraPosition() {
   const offset = new THREE.Vector3(0, 2, -5);
   const carPosition = carControls.car.position.clone();
@@ -411,25 +212,17 @@ function updateCameraPosition() {
 // Animation Loop
 function animate() {
   requestAnimationFrame(animate);
-  world.step(timeStep);
-  groundMesh.position.copy(groundBody.position);
-  groundMesh.quaternion.copy(groundBody.quaternion);
-  dummyMesh.position.copy(dummyBody.position);
-  dummyMesh.quaternion.copy(dummyBody.quaternion);
-  if (track) {
-    track.position.copy(track_body.position);
-    track.quaternion.copy(track_body.quaternion);
+
+  world.step();
+
+  if (carControls) {
+    carControls.update();
   }
   if (camera_toggle) {
     updateCameraPosition();
   } else {
     controls.update();
   }
-  if (carControls) {
-    //console.log(carControls.body.position);
-    carControls.update();
-  }
-
   renderer.render(scene, camera);
 }
 
